@@ -1,54 +1,53 @@
-{ stdenv, fetchurl, gtk3, pythonPackages, intltool,
-  pango, gsettings_desktop_schemas }:
+{ stdenv, fetchurl, gtk3, python3Packages, intltool,
+  pango, cairo, librsvg, wrapGAppsHook, xdg_utils, graphviz }:
 
 let
-  inherit (pythonPackages) python buildPythonApplication;
+  inherit (python3Packages) python buildPythonApplication;
 in buildPythonApplication rec {
-  version = "4.1.1";
+  version = "4.2.5";
   name = "gramps-${version}";
 
-  buildInputs = [ intltool gtk3 ];
+  buildInputs = [ intltool wrapGAppsHook ];
 
-  # Currently broken
+  propagatedBuildInputs = with python3Packages; [ pygobject3 bsddb3 pycairo ] ++ [ gtk3 pango cairo librsvg xdg_utils graphviz ];
+
+  # # Currently broken
   doCheck = false;
 
   src = fetchurl {
-    url = "mirror://sourceforge/gramps/Stable/${version}/${name}.tar.gz";
-    sha256 = "0jdps7yx2mlma1hdj64wssvnqd824xdvw0bmn2dnal5fn3h7h060";
+    url = "https://github.com/gramps-project/gramps/archive/v${version}.tar.gz";
+    sha256 = "0gblb2agqszhrz8ccdzf26l2lpx7wwa6w24gxiwvgl5p2mr01qqx";
   };
 
-  pythonPath = with pythonPackages; [ pygobject3 pycairo ] ++ [ pango ];
+  postUnpack = ''
+    set -x
+  '';
 
+
+  setupPyBuildFlags = [ "--resourcepath" "$out/share/gramps/" ];
   # Same installPhase as in buildPythonApplication but without --old-and-unmanageble
   # install flag.
-  installPhase = ''
-    runHook preInstall
+  # installPhase = ''
+  #   runHook preInstall
 
-    mkdir -p "$out/lib/${python.libPrefix}/site-packages"
+  #   mkdir -p "$out/lib/${python.libPrefix}/site-packages"
 
-    export PYTHONPATH="$out/lib/${python.libPrefix}/site-packages:$PYTHONPATH"
+  #   export PYTHONPATH="$out/lib/${python.libPrefix}/site-packages:$PYTHONPATH"
 
-    ${python}/bin/${python.executable} setup.py install \
-      --install-lib=$out/lib/${python.libPrefix}/site-packages \
-      --prefix="$out"
+  #   ${python}/bin/${python.executable} setup.py install \
+  #     --install-lib=$out/lib/${python.libPrefix}/site-packages \
+  #     --prefix="$out"
 
-    eapth="$out/lib/${python.libPrefix}"/site-packages/easy-install.pth
-    if [ -e "$eapth" ]; then
-        # move colliding easy_install.pth to specifically named one
-        mv "$eapth" $(dirname "$eapth")/${name}.pth
-    fi
+  #   eapth="$out/lib/${python.libPrefix}"/site-packages/easy-install.pth
+  #   if [ -e "$eapth" ]; then
+  #       # move colliding easy_install.pth to specifically named one
+  #       mv "$eapth" $(dirname "$eapth")/${name}.pth
+  #   fi
 
-    rm -f "$out/lib/${python.libPrefix}"/site-packages/site.py*
+  #   rm -f "$out/lib/${python.libPrefix}"/site-packages/site.py*
 
-    runHook postInstall
-  '';
-
-  # gobjectIntrospection package, wrap accordingly
-  preFixup = ''
-    wrapProgram $out/bin/gramps \
-      --prefix GI_TYPELIB_PATH : "$GI_TYPELIB_PATH" \
-      --prefix XDG_DATA_DIRS : "$GSETTINGS_SCHEMAS_PATH:$out/share"
-  '';
+  #   runHook postInstall
+  # '';
 
   meta = with stdenv.lib; {
     description = "Genealogy software";
