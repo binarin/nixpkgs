@@ -9,7 +9,7 @@ in buildPythonApplication rec {
 
   buildInputs = [ intltool wrapGAppsHook ];
 
-  propagatedBuildInputs = with python3Packages; [ pygobject3 bsddb3 pycairo ] ++ [ gtk3 pango cairo librsvg xdg_utils graphviz ];
+  propagatedBuildInputs = with python3Packages; [ pygobject3 bsddb3 pycairo pillow PyICU ] ++ [ gtk3 pango cairo librsvg xdg_utils graphviz ];
 
   # # Currently broken
   doCheck = false;
@@ -19,35 +19,20 @@ in buildPythonApplication rec {
     sha256 = "0gblb2agqszhrz8ccdzf26l2lpx7wwa6w24gxiwvgl5p2mr01qqx";
   };
 
-  postUnpack = ''
-    set -x
+  buildPhase = ''
+    python setup.py build
   '';
 
-
-  setupPyBuildFlags = [ "--resourcepath" "$out/share/gramps/" ];
-  # Same installPhase as in buildPythonApplication but without --old-and-unmanageble
-  # install flag.
-  # installPhase = ''
-  #   runHook preInstall
-
-  #   mkdir -p "$out/lib/${python.libPrefix}/site-packages"
-
-  #   export PYTHONPATH="$out/lib/${python.libPrefix}/site-packages:$PYTHONPATH"
-
-  #   ${python}/bin/${python.executable} setup.py install \
-  #     --install-lib=$out/lib/${python.libPrefix}/site-packages \
-  #     --prefix="$out"
-
-  #   eapth="$out/lib/${python.libPrefix}"/site-packages/easy-install.pth
-  #   if [ -e "$eapth" ]; then
-  #       # move colliding easy_install.pth to specifically named one
-  #       mv "$eapth" $(dirname "$eapth")/${name}.pth
-  #   fi
-
-  #   rm -f "$out/lib/${python.libPrefix}"/site-packages/site.py*
-
-  #   runHook postInstall
-  # '';
+  installPhase = ''
+    runHook preInstall
+    mkdir -p "$out/${python.sitePackages}"
+    export PYTHONPATH="$out/${python.sitePackages}:$PYTHONPATH"
+    ${python}/bin/${python.executable} setup.py install \
+      --install-lib=$out/${python.sitePackages} \
+      --prefix="$out" \
+      --resourcepath=$out/share
+    runHook postInstall
+  '';
 
   meta = with stdenv.lib; {
     description = "Genealogy software";
