@@ -3,6 +3,7 @@
 , openjdk ? null # javacSupport
 , unixODBC ? null # odbcSupport
 , mesa ? null, wxGTK ? null, wxmac ? null, xorg ? null # wxSupport
+, systemd ? null # systemd support in epmd
 }:
 
 { baseName ? "erlang"
@@ -53,6 +54,7 @@ in stdenv.mkDerivation ({
     ++ optionals wxSupport wxPackages2
     ++ optionals odbcSupport odbcPackages
     ++ optionals javacSupport javacPackages
+    ++ optional (!(isNull systemd)) systemd
     ++ optionals stdenv.isDarwin (with pkgs.darwin.apple_sdk.frameworks; [ Carbon Cocoa ]);
 
   debugInfo = enableDebugInfo;
@@ -82,6 +84,7 @@ in stdenv.mkDerivation ({
     ++ optional javacSupport "--with-javac"
     ++ optional odbcSupport "--with-odbc=${unixODBC}"
     ++ optional wxSupport "--enable-wx"
+    ++ optional (!(isNull systemd)) "--enable-systemd"
     ++ optional stdenv.isDarwin "--enable-darwin-64bit";
 
   # install-docs will generate and install manpages and html docs
