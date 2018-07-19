@@ -1,4 +1,15 @@
-{ lib, stdenv, fetchurl, ncurses, pkgconfig }:
+{ lib, stdenv, fetchurl, ncurses, pkgconfig
+
+# This package is somehow too deeply integrated into bootstrap(?)
+# process, and unconditionally enabling this makes both VM tests and
+# github CI fail. The problem is that `systemd` we are getting here is
+# for some reason evaluated in an environment where `fetchurl` is
+# really `fetchurlBoot` - and it fails because some dependecies will
+# try to call it with a lot of fancy options supported only by a full
+# version. So for now I'm going to make this available only by explicit request,
+# just to provide a proper version of `ps` required by RabbitMQ.
+, withSystemd ? false, systemd
+}:
 
 stdenv.mkDerivation rec {
   name = "procps-${version}";
@@ -11,7 +22,8 @@ stdenv.mkDerivation rec {
   };
 
   buildInputs = [ ncurses ];
-  nativeBuildInputs = [ pkgconfig ];
+  nativeBuildInputs = [ pkgconfig ]
+    ++ lib.optional withSystemd systemd;
 
   makeFlags = "usrbin_execdir=$(out)/bin";
 
@@ -19,6 +31,7 @@ stdenv.mkDerivation rec {
 
   # Too red
   configureFlags = [ "--disable-modern-top" ]
+    ++ lib.optional withSystemd "--with-systemd"
     ++ lib.optionals (stdenv.hostPlatform != stdenv.buildPlatform)
     [ "ac_cv_func_malloc_0_nonnull=yes"
       "ac_cv_func_realloc_0_nonnull=yes" ];
