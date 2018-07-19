@@ -4,19 +4,28 @@ with lib;
 
 let
   cfg = config.services.rabbitmq;
-  config_file = pkgs.writeText "rabbitmq.config" cfg.config;
-  config_file_wo_suffix = builtins.substring 0 ((builtins.stringLength config_file) - 7) config_file;
+
+  conf_file = pkgs.writeText "rabbitmq.conf" (lib.generators.toKeyValue {} cfg.configItems);
+  advanced_config_file = pkgs.writeText "advanced.config" cfg.config;
 
 in {
   ###### interface
   options = {
     services.rabbitmq = {
-
       enable = mkOption {
         default = false;
         description = ''
           Whether to enable the RabbitMQ server, an Advanced Message
           Queuing Protocol (AMQP) broker.
+        '';
+      };
+
+      package = mkOption {
+        default = pkgs.rabbitmq-server;
+        type = types.package;
+        defaultText = "pkgs.rabbitmq-server";
+        description = ''
+          Which rabbitmq package to use.
         '';
       };
 
@@ -30,6 +39,10 @@ in {
           <literal>guest</literal> with password
           <literal>guest</literal> by default, so you should delete
           this user if you intend to allow external access.
+
+          Together with 'port' setting it's mostly an alias for
+          configItems."listeners.tcp.1" and it's left for backwards
+          compatibility with previous version of this module.
         '';
         type = types.str;
       };
@@ -60,11 +73,29 @@ in {
         '';
       };
 
+      configItems = mkOption {
+        default = {};
+        type = types.attrsOf types.str;
+        example = ''
+          {
+            "auth_backends.1.authn" = "rabbit_auth_backend_ldap";
+            "auth_backends.1.authz" = "rabbit_auth_backend_internal";
+          }
+        '';
+        description = ''
+          New style config options.
+
+          See http://www.rabbitmq.com/configure.html
+        '';
+      };
+
       config = mkOption {
         default = "";
         type = types.str;
         description = ''
-          Verbatim configuration file contents.
+          Verbatim advanced configuration file contents.
+          Prefered way is to use configItems.
+
           See http://www.rabbitmq.com/configure.html
         '';
       };
@@ -74,6 +105,12 @@ in {
         type = types.listOf types.str;
         description = "The names of plugins to enable";
       };
+
+      pluginDirs = mkOption {
+        default = [];
+        type = types.listOf types.path;
+        description = "The list of directories containing external plugins";
+      };
     };
   };
 
@@ -81,7 +118,10 @@ in {
   ###### implementation
   config = mkIf cfg.enable {
 
-    environment.systemPackages = [ pkgs.rabbitmq_server ];
+    # This is needed so we will have 'rabbitmqctl' in our PATH
+    environment.systemPackages = [ cfg.package ];
+
+    services.epmd.enable = true;
 
     users.users.rabbitmq = {
       description = "RabbitMQ server user";
@@ -93,38 +133,44 @@ in {
 
     users.groups.rabbitmq.gid = config.ids.gids.rabbitmq;
 
+    services.rabbitmq.configItems = {
+      "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString cfg.port}";
+    };
+
     systemd.services.rabbitmq = {
       description = "RabbitMQ Server";
 
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      after = [ "network.target" "epmd.socket" ];
+      wants = [ "network.target" "epmd.socket" ];
 
-      path = [ pkgs.rabbitmq_server pkgs.procps ];
+      path = [ cfg.package ];
 
       environment = {
         RABBITMQ_MNESIA_BASE = "${cfg.dataDir}/mnesia";
-        RABBITMQ_NODE_IP_ADDRESS = cfg.listenAddress;
-        RABBITMQ_NODE_PORT = toString cfg.port;
         RABBITMQ_LOGS = "-";
-        RABBITMQ_SASL_LOGS = "-";
-        RABBITMQ_PID_FILE = "${cfg.dataDir}/pid";
         SYS_PREFIX = "";
+        RABBITMQ_CONFIG_FILE = conf_file;
+        RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
         RABBITMQ_ENABLED_PLUGINS_FILE = pkgs.writeText "enabled_plugins" ''
           [ ${concatStringsSep "," cfg.plugins} ].
         '';
-      } //  optionalAttrs (cfg.config != "") { RABBITMQ_CONFIG_FILE = config_file_wo_suffix; };
+      } //  optionalAttrs (cfg.config != "") { RABBITMQ_ADVANCED_CONFIG_FILE = advanced_config_file; };
 
       serviceConfig = {
-        ExecStart = "${pkgs.rabbitmq_server}/sbin/rabbitmq-server";
-        ExecStop = "${pkgs.rabbitmq_server}/sbin/rabbitmqctl stop";
+        ExecStart = "${cfg.package}/sbin/rabbitmq-server";
+        ExecStop = "${cfg.package}/sbin/rabbitmqctl shutdown";
         User = "rabbitmq";
         Group = "rabbitmq";
         WorkingDirectory = cfg.dataDir;
+        Type = "notify";
+        NotifyAccess = "all";
+        UMask = "0027";
+        LimitNOFILE = "100000";
+        Restart = "on-failure";
+        RestartSec = "10";
+        TimeoutStartSec = "3600";
       };
-
-      postStart = ''
-        rabbitmqctl wait ${cfg.dataDir}/pid
-      '';
 
       preStart = ''
         ${optionalString (cfg.cookie != "") ''
@@ -133,7 +179,5 @@ in {
         ''}
       '';
     };
-
   };
-
 }
