@@ -125,7 +125,7 @@ in
           #include <abstractions/base>
           #include <abstractions/nameservice>
 
-          ${getLib pkgs.glibc}/lib/*.so                    mr,
+          ${getLib pkgs.glibc}/lib/*.so*                   mr,
           ${getLib pkgs.libevent}/lib/libevent*.so*        mr,
           ${getLib pkgs.curl}/lib/libcurl*.so*             mr,
           ${getLib pkgs.openssl}/lib/libssl*.so*           mr,
